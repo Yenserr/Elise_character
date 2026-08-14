@@ -14,28 +14,40 @@ public class PlayerMovement : MonoBehaviour
     public float rotationSpeed = 15f;
     public float gravity = -9.81f;
 
-    [Header("Combo System")]
-    public float comboWindow = 0.5f; 
-    private int comboStep = 0;
-    private float lastClickTime;
-    private bool isAttacking = false;
+    [Header("Attack Lunge Settings")]
+    public float lungeSpeed = 3f;       
+    public float lungeDuration = 0.15f; 
 
     [Header("Combat Idle Settings")]
     public float combatModeDuration = 4f; 
     private float combatTimer;
     private bool isInCombat = false;
 
+    [Header("Efectos Visuales")]
+    public TrailRenderer[] punchTrails; 
+    public ParticleSystem rustDust; // NUEVO: Sistema de partículas de óxido
+
+    [Header("Hitboxes de Combate")]
+    public Hitbox leftHandHitbox;
+    public Hitbox rightHandHitbox;
+
+    private bool isStationaryAttacking = false;
+    private bool isMovingAttacking = false;
+    private bool isDodging = false;
+    
     private float verticalVelocity;
 
     void Start()
     {
         controller = GetComponent<CharacterController>();
         animator = GetComponent<Animator>();
+        SetTrails(false);
+        SetHitboxes(false);
     }
 
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.K) && !isAttacking)
+        if (Input.GetKeyDown(KeyCode.K) && !isStationaryAttacking && !isDodging)
         {
             float x = Input.GetAxisRaw("Horizontal");
             float z = Input.GetAxisRaw("Vertical");
@@ -43,7 +55,7 @@ public class PlayerMovement : MonoBehaviour
             return; 
         }
 
-        if (isAttacking) return;
+        if (isStationaryAttacking || isDodging) return;
 
         float moveX = Input.GetAxis("Horizontal");
         float moveZ = Input.GetAxis("Vertical");
@@ -59,28 +71,39 @@ public class PlayerMovement : MonoBehaviour
             controller.Move(moveDir * targetSpeed * Time.deltaTime);
             
             animator.SetFloat("Speed", isRunning ? 6f : 2f, 0.1f, Time.deltaTime);
+
+            // NUEVO: Lógica para encender el polvo al correr
+            if (isRunning && rustDust != null)
+            {
+                if (!rustDust.isPlaying) rustDust.Play();
+            }
+            else if (!isRunning && rustDust != null)
+            {
+                if (rustDust.isPlaying) rustDust.Stop();
+            }
         }
         else
         {
             animator.SetFloat("Speed", 0f, 0.1f, Time.deltaTime);
+            
+            // NUEVO: Apagar el polvo si nos detenemos
+            if (rustDust != null && rustDust.isPlaying)
+            {
+                rustDust.Stop();
+            }
         }
 
-        if (controller.isGrounded) verticalVelocity = -0.5f;
-        else verticalVelocity += gravity * Time.deltaTime;
-        controller.Move(new Vector3(0, verticalVelocity, 0) * Time.deltaTime);
+        ApplyGravity();
 
         if (Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.J))
         {
             ActivateCombatMode();
 
-            if (!isAttacking)
+            if (!isStationaryAttacking && !isMovingAttacking)
             {
-                comboStep = 1;
-                StartCoroutine(PerformCombo());
-            }
-            else if (comboStep == 1 && (Time.time - lastClickTime) < comboWindow)
-            {
-                comboStep = 2;
+                bool isMoving = moveDir.magnitude > 0.1f;
+                if (isMoving) StartCoroutine(PerformMovingAttack());
+                else StartCoroutine(PerformStationaryAttack());
             }
         }
 
@@ -95,6 +118,17 @@ public class PlayerMovement : MonoBehaviour
         }
     }
 
+    void ApplyGravity()
+    {
+        if (controller.isGrounded) verticalVelocity = -0.5f;
+        else verticalVelocity += gravity * Time.deltaTime;
+        
+        if (!isStationaryAttacking) 
+        {
+            controller.Move(new Vector3(0, verticalVelocity, 0) * Time.deltaTime);
+        }
+    }
+
     void ActivateCombatMode()
     {
         isInCombat = true;
@@ -102,28 +136,89 @@ public class PlayerMovement : MonoBehaviour
         animator.SetBool("InCombat", true);
     }
 
-    IEnumerator PerformCombo()
+    void SetTrails(bool state)
     {
-        isAttacking = true;
-        lastClickTime = Time.time;
-
-        animator.SetTrigger("AttackSingle");
-        yield return new WaitForSeconds(0.4f);
-
-        if (comboStep == 2)
+        foreach (TrailRenderer trail in punchTrails)
         {
-            animator.SetTrigger("AttackCombo");
-            yield return new WaitForSeconds(0.6f); 
+            if (trail != null) trail.emitting = state;
         }
+    }
 
-        isAttacking = false;
-        comboStep = 0;
+    void SetHitboxes(bool state)
+    {
+        if (state)
+        {
+            if (leftHandHitbox != null) leftHandHitbox.EnableHitbox();
+            if (rightHandHitbox != null) rightHandHitbox.EnableHitbox();
+        }
+        else
+        {
+            if (leftHandHitbox != null) leftHandHitbox.DisableHitbox();
+            if (rightHandHitbox != null) rightHandHitbox.DisableHitbox();
+        }
+    }
+
+    IEnumerator PerformStationaryAttack()
+    {
+        isStationaryAttacking = true;
+        animator.SetTrigger("AttackSingle"); 
+        
+        SetTrails(true);
+        SetHitboxes(true); 
+
+        yield return StartCoroutine(AttackLungeRoutine(lungeSpeed));
+        
+        SetTrails(false); 
+        SetHitboxes(false); 
+
+        yield return new WaitForSeconds(0.4f - lungeDuration);
+        isStationaryAttacking = false;
+    }
+
+    IEnumerator PerformMovingAttack()
+    {
+        isMovingAttacking = true;
+        animator.SetTrigger("AttackCombo"); 
+
+        SetTrails(true); 
+        SetHitboxes(true); 
+        
+        yield return new WaitForSeconds(0.4f); 
+        
+        SetTrails(false); 
+        SetHitboxes(false); 
+
+        yield return new WaitForSeconds(0.2f); 
+        isMovingAttacking = false;
+    }
+
+    IEnumerator AttackLungeRoutine(float speed)
+    {
+        float timer = 0f;
+        while (timer < lungeDuration)
+        {
+            Vector3 lungeDir = transform.forward * speed;
+            lungeDir.y = verticalVelocity; 
+
+            controller.Move(lungeDir * Time.deltaTime);
+            animator.SetFloat("Speed", 6f); 
+            
+            timer += Time.deltaTime;
+            yield return null; 
+        }
+        animator.SetFloat("Speed", 0f);
     }
 
     IEnumerator PerformDodge(float x, float z)
     {
-        isAttacking = true;
+        isDodging = true;
         ActivateCombatMode();
+
+        // NUEVO: Hacemos que expulse una ráfaga intensa de 30 partículas de golpe al esquivar
+        if (rustDust != null)
+        {
+            rustDust.Emit(30); 
+        }
 
         string triggerName = "DodgeForward"; 
         if (z < -0.5f) triggerName = "DodgeBack";
@@ -131,10 +226,7 @@ public class PlayerMovement : MonoBehaviour
         else if (x < -0.5f) triggerName = "DodgeLeft";
 
         animator.SetTrigger(triggerName);
-
-
         yield return new WaitForSeconds(0.5f); 
-
-        isAttacking = false;
+        isDodging = false;
     }
 }
