@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections;
+using UnityEngine.InputSystem;
 
 [RequireComponent(typeof(CharacterController))]
 [RequireComponent(typeof(Animator))]
@@ -45,78 +46,155 @@ public class PlayerMovement : MonoBehaviour
         SetHitboxes(false);
     }
 
-    void Update()
+   void Update()
+{
+    // INPUT DE MOVIMIENTO   
+    Vector2 input = Vector2.zero;
+
+    if (Keyboard.current != null)
     {
-        if (Input.GetKeyDown(KeyCode.K) && !isStationaryAttacking && !isDodging)
+        input = new Vector2(
+            (Keyboard.current.dKey.isPressed ? 1f : 0f) -
+            (Keyboard.current.aKey.isPressed ? 1f : 0f),
+
+            (Keyboard.current.wKey.isPressed ? 1f : 0f) -
+            (Keyboard.current.sKey.isPressed ? 1f : 0f)
+        );
+    }
+
+    float moveX = input.x;
+    float moveZ = input.y;
+
+    // DODGE CON K
+   
+    if (Keyboard.current != null &&
+        Keyboard.current.kKey.wasPressedThisFrame &&
+        !isStationaryAttacking &&
+        !isDodging)
+    {
+        float x = input.x;
+        float z = input.y;
+
+        StartCoroutine(PerformDodge(x, z));
+        return;
+    }
+
+    if (isStationaryAttacking || isDodging)
+        return;
+
+    Vector3 moveDir = new Vector3(moveX, 0f, moveZ).normalized;
+
+    
+    // MOVIMIENTO
+    
+    if (moveDir.magnitude >= 0.1f)
+    {
+        bool isRunning = Keyboard.current != null &&
+                         Keyboard.current.leftShiftKey.isPressed;
+
+        float targetSpeed = isRunning ? runSpeed : walkSpeed;
+
+        Quaternion targetRotation = Quaternion.LookRotation(moveDir);
+
+        transform.rotation = Quaternion.Slerp(
+            transform.rotation,
+            targetRotation,
+            rotationSpeed * Time.deltaTime
+        );
+
+        controller.Move(
+            moveDir * targetSpeed * Time.deltaTime
+        );
+
+        animator.SetFloat(
+            "Speed",
+            isRunning ? 6f : 2f,
+            0.1f,
+            Time.deltaTime
+        );
+
+        
+        // POLVO AL CORRER
+        
+        if (isRunning && rustDust != null)
         {
-            float x = Input.GetAxisRaw("Horizontal");
-            float z = Input.GetAxisRaw("Vertical");
-            StartCoroutine(PerformDodge(x, z));
-            return; 
+            if (!rustDust.isPlaying)
+                rustDust.Play();
         }
-
-        if (isStationaryAttacking || isDodging) return;
-
-        float moveX = Input.GetAxis("Horizontal");
-        float moveZ = Input.GetAxis("Vertical");
-        Vector3 moveDir = new Vector3(moveX, 0f, moveZ).normalized;
-
-        if (moveDir.magnitude >= 0.1f)
+        else if (!isRunning && rustDust != null)
         {
-            bool isRunning = Input.GetKey(KeyCode.LeftShift);
-            float targetSpeed = isRunning ? runSpeed : walkSpeed;
-            
-            Quaternion targetRotation = Quaternion.LookRotation(moveDir);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
-            controller.Move(moveDir * targetSpeed * Time.deltaTime);
-            
-            animator.SetFloat("Speed", isRunning ? 6f : 2f, 0.1f, Time.deltaTime);
-
-            // NUEVO: Lógica para encender el polvo al correr
-            if (isRunning && rustDust != null)
-            {
-                if (!rustDust.isPlaying) rustDust.Play();
-            }
-            else if (!isRunning && rustDust != null)
-            {
-                if (rustDust.isPlaying) rustDust.Stop();
-            }
-        }
-        else
-        {
-            animator.SetFloat("Speed", 0f, 0.1f, Time.deltaTime);
-            
-            // NUEVO: Apagar el polvo si nos detenemos
-            if (rustDust != null && rustDust.isPlaying)
-            {
+            if (rustDust.isPlaying)
                 rustDust.Stop();
-            }
-        }
-
-        ApplyGravity();
-
-        if (Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.J))
-        {
-            ActivateCombatMode();
-
-            if (!isStationaryAttacking && !isMovingAttacking)
-            {
-                bool isMoving = moveDir.magnitude > 0.1f;
-                if (isMoving) StartCoroutine(PerformMovingAttack());
-                else StartCoroutine(PerformStationaryAttack());
-            }
-        }
-
-        if (isInCombat)
-        {
-            combatTimer -= Time.deltaTime;
-            if (combatTimer <= 0f)
-            {
-                isInCombat = false;
-                animator.SetBool("InCombat", false);
-            }
         }
     }
+    else
+    {
+        animator.SetFloat(
+            "Speed",
+            0f,
+            0.1f,
+            Time.deltaTime
+        );
+
+        // Apagar polvo
+        if (rustDust != null && rustDust.isPlaying)
+        {
+            rustDust.Stop();
+        }
+    }
+
+   
+    // GRAVEDAD
+    
+    ApplyGravity();
+
+    
+    // ATAQUE
+    // Click izquierdo o J
+  
+    bool attackPressed = false;
+
+    if (Mouse.current != null &&
+        Mouse.current.leftButton.wasPressedThisFrame)
+    {
+        attackPressed = true;
+    }
+
+    if (Keyboard.current != null &&
+        Keyboard.current.jKey.wasPressedThisFrame)
+    {
+        attackPressed = true;
+    }
+
+    if (attackPressed)
+    {
+        ActivateCombatMode();
+
+        if (!isStationaryAttacking && !isMovingAttacking)
+        {
+            bool isMoving = moveDir.magnitude > 0.1f;
+
+            if (isMoving)
+                StartCoroutine(PerformMovingAttack());
+            else
+                StartCoroutine(PerformStationaryAttack());
+        }
+    }
+
+   
+    // MODO COMBATE
+    
+    if (isInCombat)
+    {
+        combatTimer -= Time.deltaTime;
+
+        if (combatTimer <= 0f)
+        {
+            isInCombat = false;
+            animator.SetBool("InCombat", false);
+        }
+    }
+}
 
     void ApplyGravity()
     {
