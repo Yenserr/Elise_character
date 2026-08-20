@@ -1753,6 +1753,23 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 403392, guid: e51407a0809d1584ba21208f0acb453f, type: 3}
   m_PrefabInstance: {fileID: 684299041}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &722617078 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 5510131194688926705, guid: 595ac0ef7d38c4878b10e32696a19eb0, type: 3}
+  m_PrefabInstance: {fileID: 1905650423}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &722617080
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 722617078}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e46e1ad0132a7465b9570f3a8502d989, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ColliderChecker
 --- !u!1001 &724559382
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -4723,7 +4740,10 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 5510131194688926705, guid: 595ac0ef7d38c4878b10e32696a19eb0, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 722617080}
   m_SourcePrefab: {fileID: 100100000, guid: 595ac0ef7d38c4878b10e32696a19eb0, type: 3}
 --- !u!4 &1905650424 stripped
 Transform:
