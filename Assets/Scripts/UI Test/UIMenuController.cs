@@ -43,7 +43,7 @@ public class UIMenuController : MonoBehaviour
     // JUGAR
     public void PlayGame()
     {
-        SceneManager.LoadScene("Game");
+        SceneManager.LoadScene("underclass");
     }
 
     // SALIR

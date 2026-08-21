@@ -67,5 +67,5 @@
         "*.sln": "*.csproj",
         "*.slnx": "*.csproj"
     },
-    "dotnet.defaultSolution": "The-Ascent-.slnx"
+    "dotnet.defaultSolution": "The-Ascent.slnx"
 }
